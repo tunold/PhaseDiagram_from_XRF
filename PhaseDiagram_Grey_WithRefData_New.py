@@ -350,7 +350,7 @@ with st.sidebar.expander("Tweaks"):
                                key="tweak_slope_match")
     zL_min = st.number_input("zL Minimum (untere Bound für Global Fit)",
                               min_value=0.00, max_value=1.00,
-                              value=0.25, step=0.01, format="%.3f",
+                              value=0.3, step=0.01, format="%.3f",
                               key="tweak_zl_min")
     w_Ba   = st.number_input("Gewicht Ba", min_value=0.1, max_value=5.0,
                               value=1.0, step=0.1, format="%.1f", key="tweak_wba")
