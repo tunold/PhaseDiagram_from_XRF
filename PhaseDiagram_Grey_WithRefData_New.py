@@ -279,15 +279,24 @@ if up is not None:
         st.error(f"Column not found: {e}. Please check the column names.")
         st.stop()
 else:
-    st.warning("Keine CSV hochgeladen — nutze Demo-Daten.")
-    xx = np.linspace(0.42, 0.60, 80)
-    Ba_demo = 0.22 + 0.28*(xx-0.42)/0.18
-    Zr_demo = 0.26 - 0.22*(xx-0.42)/0.18
-    S_demo  = 1.0 - (Ba_demo + Zr_demo)
-    df_meas = pd.DataFrame({
-        "Ba_Zr_ratio": xx, "Ba_norm": Ba_demo, "Zr_norm": Zr_demo, "S_norm": S_demo
-    })
-
+    try:
+        df_meas_raw = pd.read_csv("analyzedXRF_3925-20.csv")
+        df_meas = pd.DataFrame()
+        df_meas["Ba_norm"]     = (_to_float(df_meas_raw[c_ba]) / 100.0).astype(float)
+        df_meas["Zr_norm"]     = (_to_float(df_meas_raw[c_zr]) / 100.0).astype(float)
+        df_meas["S_norm"]      = (_to_float(df_meas_raw[c_s])  / 100.0).astype(float)
+        df_meas["Ba_Zr_ratio"] = df_meas["Ba_norm"] / (df_meas["Ba_norm"] + df_meas["Zr_norm"])
+        st.info("No CSV uploaded — using default dataset: analyzedXRF_3925-20.csv")
+    except FileNotFoundError:
+        st.warning("No CSV uploaded and default file not found — using synthetic demo data.")
+        xx = np.linspace(0.42, 0.60, 80)
+        Ba_demo = 0.22 + 0.28*(xx-0.42)/0.18
+        Zr_demo = 0.26 - 0.22*(xx-0.42)/0.18
+        S_demo  = 1.0 - (Ba_demo + Zr_demo)
+        df_meas = pd.DataFrame({
+            "Ba_Zr_ratio": xx, "Ba_norm": Ba_demo,
+            "Zr_norm": Zr_demo, "S_norm": S_demo
+        })
 for c in ("Ba_norm","Zr_norm","S_norm","Ba_Zr_ratio"):
     df_meas[c] = pd.to_numeric(df_meas[c], errors="coerce")
 df_meas = df_meas.dropna().reset_index(drop=True)
