@@ -251,6 +251,10 @@ for key in ("model", "df_fit_grid", "df_fit_meas", "elem_panel", "last_fit_resul
     if key not in st.session_state:
         st.session_state[key] = None
 
+for key in ("model", "df_fit_grid", "df_fit_meas", "elem_panel", "last_fit_result", "knots_used"):
+    if key not in st.session_state:
+        st.session_state[key] = None
+
 # trigger_calc: wird von fit_now gesetzt, damit do_calc im nächsten Rerun feuert
 if "trigger_calc" not in st.session_state:
     st.session_state["trigger_calc"] = False
@@ -282,21 +286,22 @@ else:
     try:
         df_meas_raw = pd.read_csv("analyzedXRF_3925-20.csv")
         df_meas = pd.DataFrame()
-        df_meas["Ba_norm"]     = (_to_float(df_meas_raw[c_ba]) / 100.0).astype(float)
-        df_meas["Zr_norm"]     = (_to_float(df_meas_raw[c_zr]) / 100.0).astype(float)
-        df_meas["S_norm"]      = (_to_float(df_meas_raw[c_s])  / 100.0).astype(float)
+        df_meas["Ba_norm"] = (_to_float(df_meas_raw[c_ba]) / 100.0).astype(float)
+        df_meas["Zr_norm"] = (_to_float(df_meas_raw[c_zr]) / 100.0).astype(float)
+        df_meas["S_norm"] = (_to_float(df_meas_raw[c_s]) / 100.0).astype(float)
         df_meas["Ba_Zr_ratio"] = df_meas["Ba_norm"] / (df_meas["Ba_norm"] + df_meas["Zr_norm"])
         st.info("No CSV uploaded — using default dataset: analyzedXRF_3925-20.csv")
     except FileNotFoundError:
         st.warning("No CSV uploaded and default file not found — using synthetic demo data.")
         xx = np.linspace(0.42, 0.60, 80)
-        Ba_demo = 0.22 + 0.28*(xx-0.42)/0.18
-        Zr_demo = 0.26 - 0.22*(xx-0.42)/0.18
-        S_demo  = 1.0 - (Ba_demo + Zr_demo)
+        Ba_demo = 0.22 + 0.28 * (xx - 0.42) / 0.18
+        Zr_demo = 0.26 - 0.22 * (xx - 0.42) / 0.18
+        S_demo = 1.0 - (Ba_demo + Zr_demo)
         df_meas = pd.DataFrame({
             "Ba_Zr_ratio": xx, "Ba_norm": Ba_demo,
             "Zr_norm": Zr_demo, "S_norm": S_demo
         })
+
 for c in ("Ba_norm","Zr_norm","S_norm","Ba_Zr_ratio"):
     df_meas[c] = pd.to_numeric(df_meas[c], errors="coerce")
 df_meas = df_meas.dropna().reset_index(drop=True)
@@ -404,7 +409,7 @@ annB_x = 0.0;   annB_y = 0.0;   annB_fs = 12
 annB_col = "#000000"; annB_wt = "normal"; annB_arrow = False
 annB_x2 = 0.0;  annB_y2 = 0.0
 
-annC_extra_on = False
+annC_extra_on = True
 extra_cfg = []
 
 # ------------------------------ Title & meta ----------------------------------
@@ -641,6 +646,10 @@ if do_calc or trigger:
             xs=xs_meas, Ba_m=Ba_m, Zr_m=Zr_m, S_m=S_m,
             Ba_p=Ba_p_s, Zr_p=Zr_p_s, S_p=S_p_s
         )
+        # am Ende von if do_calc or trigger:, nach den anderen session_state Zuweisungen:
+        st.session_state["knots_used"] = dict(
+            zL=zL_use, z50=z50_use, z54=z54_use, z57=z57_use, z60=z60_use
+        )
 
 # ------------------------------ Plots & KPIs ----------------------------------
 if any(st.session_state[k] is None for k in ("model", "df_fit_grid", "df_fit_meas", "elem_panel")):
@@ -727,6 +736,58 @@ else:
         decimate=decimate, dashed_all_boundaries=True,
         dashed_lw=1.0, dashed_alpha=0.9, show_guides=show_guides,
     )
+    # Phase labels direkt auf axC schreiben
+    xlim_c = (float(FG["Ba_Zr_ratio"].min()), float(FG["Ba_Zr_ratio"].max()))
+    x_mid = (xlim_c[0] + xlim_c[1]) / 2
+
+    # Mittelpunkte der Phasenbänder an einem repräsentativen x-Wert berechnen
+    x_rep = np.array([x_mid])
+
+    if st.session_state.get("knots_used") is not None:
+
+        # Phasenbreiten über den gesamten Grid
+        FG_s1 = FG["BaZrS3"]
+        FG_s2 = FG["BaZrS3"] + FG["Ba4Zr3S10"]
+        FG_s3 = FG["BaZrS3"] + FG["Ba4Zr3S10"] + FG["Ba3Zr2S7"]
+        FG_x = FG["Ba_Zr_ratio"]
+
+        label_kw = dict(fontsize=11, ha="center", va="center", zorder=10,
+                        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.6))
+
+        # BaZrS3
+        width_BZS = FG["BaZrS3"]
+        if width_BZS.max() > 0.04:
+            ix = width_BZS.argmax()
+            axC.text(float(FG_x.iloc[ix])-0.02, float(FG_s1.iloc[ix]) / 2,
+                     "BaZrS₃", **label_kw)
+
+        # Ba4Zr3S10
+        width_B4 = FG["Ba4Zr3S10"]
+        if width_B4.max() > 0.04:
+            ix = width_B4.argmax()
+            axC.text(float(FG_x.iloc[ix])-0.02,
+                     float(FG_s1.iloc[ix]) + float(width_B4.iloc[ix]) / 2+0.22,
+                     "Ba₄Zr₃S₁₀", **label_kw)
+
+        # Ba3Zr2S7: ha="right" + y nach oben
+        width_B3 = FG["Ba3Zr2S7"]
+        if width_B3.max() > 0.04:
+            ix = width_B3.argmax()
+            axC.text(float(FG_x.iloc[ix]),
+                     float(FG_s2.iloc[ix]) + float(width_B3.iloc[ix]) / 2 + 0.1,
+                     "Ba₃Zr₂S₇",
+                     **{**label_kw, "ha": "right"})
+
+        # ZrO2: ha="left"
+        width_ZR = FG["ZrO2"]
+        if width_ZR.max() > 0.04:
+            ix = width_ZR.argmax()
+            axC.text(float(FG_x.iloc[ix])+0.01,
+                     float(FG_s3.iloc[ix]) + float(width_ZR.iloc[ix]) / 2,
+                     "ZrO₂",
+                     **{**label_kw, "ha": "left"})
+
+
     if use_lit:
         axC.scatter([lit_x], [lit_y], marker=lit_marker, s=lit_size,
                     facecolors=("none" if lit_face == "none" else lit_face),
